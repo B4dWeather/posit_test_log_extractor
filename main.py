@@ -7,7 +7,7 @@ from simplePositLib import *
 # ----------------------- CONFIGURATION -------------------------
 verbose = False  # output more data to console; True => VERY SLOW to execute
 path = 'logs'  # folder containing the .log files
-limit = 25  # max lines per file to read; put -1 to read the whole file.
+limit = 500001  # max lines per file to read; put -1 to read the whole file.
 # parameter to work with:
 N = 8  # bits on which each posit is allocated
 ES = 0  # bits reserved for exponent, in a posit string
@@ -33,10 +33,12 @@ Mistakes = 0
 Read = 0
 Approx = 0
 Discarded = 0
+last_msg = ""
 
 
 # ---------------------------------------------------------------
 # ------------------------- FUNCTIONS ---------------------------
+
 # LOG file should be written with rows like: "'i' $input 'o' $output"
 def extract_raw_input(raw_input):
     chunks = raw_input.split(' ')
@@ -64,6 +66,19 @@ def calculate_error(a, b, c, o, sensitivity):
     return e, (abs(e) < sensitivity)
 
 
+# fancy console messages
+def verbose_msg(msg):
+    if msg == "x":
+        return "Line discarded because of 'x' flag"
+    if msg == "a":
+        return "Expected output not representable, but effective output is correctly rounded"
+    if msg == "e":
+        return "Output is wrong"
+    if msg == "v":
+        return "Output is correct"
+    return ""
+
+
 # read the log file line by line, and produce a validation report
 def validate_log(input_file, max_lines=-1):
     # validation counters are initialized to zero
@@ -73,18 +88,25 @@ def validate_log(input_file, max_lines=-1):
     global Approx
     global Discarded
     global verbose
-
+    global last_msg
     # the smallest number that can be represented with the number of bits of the output
     # a number smaller than this is considered not representable
     sensitivity = posit2real('1'.zfill(N))
 
+    print("Starting: scan ", input_file)
     with open(path + "/" + input_file, "r") as f:
-        for line in f:
 
+        a_f = 0
+        b_f = 0
+        c_f = 0
+        out_f = 0
+        e = 0
+        for line in f:
             # avoid to read the whole file, that might be huge
             raw_input = line.rstrip()
 
             if max_lines == 0:
+                print("Enforced shut down: reached limit of max lines for this file")
                 break
             if max_lines > 0:
                 max_lines -= 1
@@ -95,6 +117,7 @@ def validate_log(input_file, max_lines=-1):
             if flag == 'x':
                 Discarded += 1
                 Read += 1
+                last_msg = "x"
             else:
                 # cut the arrays into variables
                 a_b, b_b, c_b, out_b = split_variables(in_hex, out_hex)
@@ -112,23 +135,50 @@ def validate_log(input_file, max_lines=-1):
                     if negligible:
                         # ethe output cannot be represented, so the error is due to rounding
                         Approx += 1
-                        # TODO
+                        last_msg = "a"
                     else:
-                        # the output can be represented but it is wrong
+                        # output might be not representable
+
+                        if e > 0:  # round up happened, o > a+bc
+                            o_lb_f = posit2real(bin(int(out_b, 2) - 1), N, ES)
+                            e2, _ = calculate_error(a_f, b_f, c_f, o_lb_f, 0)
+                            if e2 < 0:  # the correct result is not between two consecutive posit
+                                Approx += 1  # so it is rounded
+                                last_msg = "a"
+                            else:
+                                Mistakes += 1  # or, it is just wrong
+                                last_msg = "e"
+                        else:  # round down happened, o < a+bc
+                            o_ub_f = posit2real(bin(int(out_b, 2) + 1), N, ES)
+                            e2, _ = calculate_error(a_f, b_f, c_f, o_ub_f, 0)
+                            if e2 > 0:  # the correct result is not between two consecutive posit
+                                Approx += 1  # so it is rounded
+                                last_msg = "a"
+                            else:
+                                Mistakes += 1  # or, it is just wrong
+                                last_msg = "e"
+                        # output can be represented but it is wrong
                         Mistakes += 1
-                    if verbose:
-                        print("Line: ", str(Read))
-                        print("A: ", a_f, "B: ", b_f, " C: ", c_f, f" Out: ", out_f)
-                        print(out_f, " = ", a_f, " + ", b_f * c_f)
-                        print("Error: " + str(e))
+                        last_msg = "e"
                 else:
                     # the output can be represented and it is correct
                     Read += 1
                     Correct += 1
+                    last_msg = "v"
+            if Read % 1000 == 0:
+                print("Reached line ", Read)
+            if verbose:
+                print("Line: ", str(Read))
+                print("A: ", a_f, "B: ", b_f, " C: ", c_f, f" Out: ", out_f)
+                print(out_f, " = ", a_f, " + ", b_f * c_f)
+                print("Error: " + str(e))
+                print("Decision: ", verbose_msg(last_msg))
         f.close()
+        print("Scan completed")
+
+        # ---------------------------------------------------------------
 
 
-# ---------------------------------------------------------------
 # ------------------------- MAIN BODY ---------------------------
 for file in files:
     validate_log(file, limit)
