@@ -112,6 +112,7 @@ def validate_log(input_file, max_lines=-1):
                     if negligible:
                         # ethe output cannot be represented, so the error is due to rounding
                         Approx += 1
+                        # TODO
                     else:
                         # the output can be represented but it is wrong
                         Mistakes += 1
