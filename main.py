@@ -21,39 +21,63 @@ path = 'logs'
 files = [f for f in listdir(path) if isfile(join(path, f))]
 
 
-def regime(posit_bits):
+def a2comp(bits, expected_len=8):
+    complement = ""
+    i = 0
+    reduced = bin(int(bits, 2) - 1)[2:].zfill(expected_len)
+    for bit in reduced:
+        if bit == '0':
+            complement += '1'
+        else:
+            complement += '0'
+        i += 1
+    converted = bin(int(complement, 2))
+    return converted[2:].zfill(expected_len)
+
+
+def regime(posit_bits, size):
     m = 0
     i = 1
-    if posit_bits[1] == 0:
-        while posit_bits[i] == 0:
+    if posit_bits[1] == '0':
+        while posit_bits[i] == '0':
             m -= 1
             i += 1
-    if posit_bits[1] == 1:
-        while posit_bits[i] == 1:
+            if i >= size:
+                break
+    if posit_bits[1] == '1':
+        while posit_bits[i] == '1':
             m += 1
             i += 1
+            if i >= size:
+                break
         m -= 1
     return m, i
 
 
 def bit2fraction(bits):
-    f = int(bits, 2)
-    while f > 1:
-        f /= 10
-    f += 1
+    f = 1
+    i = 1
+    for bit in bits:
+        if bit == '1':
+            f += pow(2, -1 * i)
+        i += 1
     return f
 
 
-def bit2posit(p_size, es_size, bits):
-    s = 0
-    if bits[0] == 1:
-        s = 1
-    k, regime_size = regime(bits)
+def bit2posit(bits, p_size=8, es_size=0):
+    s = 1
+    if bits[0] == '1':
+        s = -1
+    if s < 0:
+        bits = a2comp(bits, p_size)
+    k, regime_size = regime(bits, p_size)
     if es_size > 0:
         e = int(bits[regime_size + 1:regime_size + 1 + es_size], 2)
     else:
-        e = 1  # 1?
-    f = bit2fraction(bits[regime_size + 1 + es_size:])
+        e = 0
+    f = 1
+    if p_size > regime_size + es_size + 1:
+        f = bit2fraction(bits[regime_size + 1 + es_size:])
     return s * f * pow(2, e) * pow(pow(2, pow(2, es_size)), k)
 
 
@@ -66,8 +90,16 @@ def extract_raw_input(raw_input):
     return chunks[1], chunks[3][1:], chunks[3][0]
 
 
-def validate_log(filename,max_lines=-1):
-    with open(path+"/"+filename, "r") as file:
+def split_variables(in_hex, out_hex):
+    a = hex2bit(in_hex[:A_h_len], A_binary_len)
+    b = hex2bit(in_hex[A_h_len:A_h_len + B_h_len], B_binary_len)
+    c = hex2bit(in_hex[A_h_len + B_h_len:], C_binary_len)
+    o = hex2bit(out_hex, Out_binary_len)
+    return a, b, c, o
+
+
+def validate_log(input_file, max_lines=-1):
+    with open(path + "/" + input_file, "r") as file:
         for line in file:
 
             raw_input = line.rstrip()
@@ -83,15 +115,14 @@ def validate_log(filename,max_lines=-1):
             if flag == 'x':
                 continue
 
-            A_b = hex2bit(in_hex[:A_h_len], A_binary_len)
-            B_b = hex2bit(in_hex[A_h_len:A_h_len + B_h_len], B_binary_len)
-            C_b = hex2bit(in_hex[A_h_len + B_h_len:], C_binary_len)
-            out_b = hex2bit(out_hex, Out_binary_len)
+            a_b, b_b, c_b, out_b = split_variables(in_hex, out_hex)
 
-            print(A_b)
-            print(B_b)
-            print(C_b)
+            a_f = bit2posit(a_b)
+            b_f = bit2posit(b_b)
+            c_f = bit2posit(c_b)
+            out_f = bit2posit(out_b)
+
     file.close()
 
 
-validate_log(files[0],limit)
+validate_log(files[0], 5)
