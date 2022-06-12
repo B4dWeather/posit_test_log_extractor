@@ -7,7 +7,9 @@ from simplePositLib import *
 # ----------------------- CONFIGURATION -------------------------
 verbose = False  # output more data to console; True => VERY SLOW to execute
 path = 'logs'  # folder containing the .log files
-limit = 500001  # max lines per file to read; put -1 to read the whole file.
+rounding_tolerance = 2  # how many consecutive posits are considered a correct approximation
+limit_rows_per_file = 11001  # max lines per file to read; put -1 to read the whole file.
+limit_errors_to_display = 50  # max errors to output in console as samples; put -1 for infinite
 # parameter to work with:
 N = 8  # bits on which each posit is allocated
 ES = 0  # bits reserved for exponent, in a posit string
@@ -34,7 +36,7 @@ Read = 0
 Approx = 0
 Discarded = 0
 last_msg = ""
-
+errors_displayed = 0
 
 # ---------------------------------------------------------------
 # ------------------------- FUNCTIONS ---------------------------
@@ -89,13 +91,17 @@ def validate_log(input_file, max_lines=-1):
     global Discarded
     global verbose
     global last_msg
+    global errors_displayed
     # the smallest number that can be represented with the number of bits of the output
     # a number smaller than this is considered not representable
     sensitivity = posit2real('1'.zfill(N))
 
     print("Starting: scan ", input_file)
     with open(path + "/" + input_file, "r") as f:
-
+        a_b = 0
+        b_b = 0
+        c_b = 0
+        out_b = 0
         a_f = 0
         b_f = 0
         c_f = 0
@@ -133,33 +139,30 @@ def validate_log(input_file, max_lines=-1):
                 if e != 0:
                     Read += 1
                     if negligible:
-                        # ethe output cannot be represented, so the error is due to rounding
+                        # the output cannot be represented, so the error is due to rounding
                         Approx += 1
                         last_msg = "a"
                     else:
                         # output might be not representable
+                        o_lb_f = posit2real(bin(int(out_b, 2) - rounding_tolerance), N, ES)
+                        o_ub_f = posit2real(bin(int(out_b, 2) + rounding_tolerance), N, ES)
 
-                        if e > 0:  # round up happened, o > a+bc
-                            o_lb_f = posit2real(bin(int(out_b, 2) - 1), N, ES)
-                            e2, _ = calculate_error(a_f, b_f, c_f, o_lb_f, 0)
-                            if e2 < 0:  # the correct result is not between two consecutive posit
-                                Approx += 1  # so it is rounded
+                        e_low, _ = calculate_error(a_f, b_f, c_f, o_lb_f, 0)
+                        e_upp, _ = calculate_error(a_f, b_f, c_f, o_ub_f, 0)
+
+                        # if the correct result is between two consecutive posit, then
+                        # the error for them should have different sign
+
+                        if sign(e) != sign(e_low):
+                            Approx += 1  # up rounding has happened
+                            last_msg = "a"
+                        else:
+                            if sign(e) != sign(e_upp):
+                                Approx += 1  # down rounding has happened
                                 last_msg = "a"
-                            else:
-                                Mistakes += 1  # or, it is just wrong
+                            else:  # in this case the error is not about rounding
+                                Mistakes += 1
                                 last_msg = "e"
-                        else:  # round down happened, o < a+bc
-                            o_ub_f = posit2real(bin(int(out_b, 2) + 1), N, ES)
-                            e2, _ = calculate_error(a_f, b_f, c_f, o_ub_f, 0)
-                            if e2 > 0:  # the correct result is not between two consecutive posit
-                                Approx += 1  # so it is rounded
-                                last_msg = "a"
-                            else:
-                                Mistakes += 1  # or, it is just wrong
-                                last_msg = "e"
-                        # output can be represented but it is wrong
-                        Mistakes += 1
-                        last_msg = "e"
                 else:
                     # the output can be represented and it is correct
                     Read += 1
@@ -167,12 +170,18 @@ def validate_log(input_file, max_lines=-1):
                     last_msg = "v"
             if Read % 1000 == 0:
                 print("Reached line ", Read)
-            if verbose:
+            if verbose or ((last_msg == "e") and (errors_displayed < limit_errors_to_display)):
                 print("Line: ", str(Read))
-                print("A: ", a_f, "B: ", b_f, " C: ", c_f, f" Out: ", out_f)
-                print(out_f, " = ", a_f, " + ", b_f * c_f)
-                print("Error: " + str(e))
+                if last_msg != "x":
+                    print("A: ", a_b, " -> ", a_f)
+                    print("B: ", b_b, " -> ", b_f)
+                    print("C: ", c_b, " -> ", c_f)
+                    print("Out: ", out_b, " -> ", out_f)
+                    print(out_f, " = ", a_f, " + ", b_f * c_f)
+                    print("Error: " + str(e))
                 print("Decision: ", verbose_msg(last_msg))
+                if last_msg == "e":
+                    errors_displayed += 1
         f.close()
         print("Scan completed")
 
@@ -181,7 +190,7 @@ def validate_log(input_file, max_lines=-1):
 
 # ------------------------- MAIN BODY ---------------------------
 for file in files:
-    validate_log(file, limit)
+    validate_log(file, limit_rows_per_file)
 
 # validation report
 print("lines read: " + str(Read))

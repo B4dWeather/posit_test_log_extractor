@@ -29,6 +29,18 @@ def a2comp(bits, expected_len=8):
     return converted[2:].zfill(expected_len)
 
 
+# function: compute the sign of a function
+# oddly, looks like this function require numpy, and it's not default included in python
+def sign(n):
+    # $ parameters $
+    # $ n: real number
+    # returns 1 for positive numbers and -1 for negative numbers
+    if n > 0:
+        return 1
+    else:
+        return -1
+
+
 # function: compute the regime of the given Posit
 def regime(posit_bits, size):
     # $ parameters $
