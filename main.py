@@ -33,10 +33,12 @@ files = [f for f in listdir(path) if isfile(join(path, f))]
 Correct = 0
 Mistakes = 0
 Read = 0
-Approx = 0
+Approx_ok = 0
+Approx_no = 0
 Discarded = 0
 last_msg = ""
 errors_displayed = 0
+
 
 # ---------------------------------------------------------------
 # ------------------------- FUNCTIONS ---------------------------
@@ -61,9 +63,13 @@ def split_variables(in_hex, out_hex):
 
 
 # expected operation is A+B*C; the result is compared with the output saved in the log
+def expected_output(a, b, c):
+    return a + b * c
+
+
 # sensitivity is the smallest number that can be computed
 def calculate_error(a, b, c, o, sensitivity):
-    e = o - (a + b * c)
+    e = o - expected_output(a, b, c)
     # returns the error, and a flag that notify is the number was not representable (smaller than sensitivity)
     return e, (abs(e) < sensitivity)
 
@@ -87,7 +93,8 @@ def validate_log(input_file, max_lines=-1):
     global Correct
     global Read
     global Mistakes
-    global Approx
+    global Approx_ok
+    global Approx_no
     global Discarded
     global verbose
     global last_msg
@@ -140,7 +147,7 @@ def validate_log(input_file, max_lines=-1):
                     Read += 1
                     if negligible:
                         # the output cannot be represented, so the error is due to rounding
-                        Approx += 1
+                        Approx_ok += 1
                         last_msg = "a"
                     else:
                         # output might be not representable
@@ -154,15 +161,20 @@ def validate_log(input_file, max_lines=-1):
                         # the error for them should have different sign
 
                         if sign(e) != sign(e_low):
-                            Approx += 1  # up rounding has happened
+                            Approx_ok += 1  # up rounding has happened
                             last_msg = "a"
                         else:
                             if sign(e) != sign(e_upp):
-                                Approx += 1  # down rounding has happened
+                                Approx_ok += 1  # down rounding has happened
                                 last_msg = "a"
-                            else:  # in this case the error is not about rounding
-                                Mistakes += 1
-                                last_msg = "e"
+                            else:  # error is beyond approximation threshold
+                                representable = out_f == expected_output(a_f, b_f, c_f)
+                                if representable:
+                                    Mistakes += 1
+                                    last_msg = "e"
+                                else:
+                                    Approx_no += 1
+                                    last_msg = "o"
                 else:
                     # the output can be represented and it is correct
                     Read += 1
@@ -193,8 +205,12 @@ for file in files:
     validate_log(file, limit_rows_per_file)
 
 # validation report
-print("lines read: " + str(Read))
-print("correct: " + str(Correct))
-print("Correctly approximated: " + str(Approx))
-print("mistakes: " + str(Mistakes))
-print("Discarded lines: " + str(Discarded))
+print("\n ========= Analysis completed ========= ")
+print("# Lines read: " + str(Read))
+print("# Discarded lines: " + str(Discarded))
+print("\n # Representable output: ", str(Correct + Mistakes))
+print("Correct results: " + str(Correct))
+print("Mistakes: " + str(Mistakes))
+print("\n # Not representable output: ", str(Approx_ok + Approx_no))
+print("Correctly approximated: " + str(Approx_ok))
+print("Wrongly approximated: " + str(Approx_no))
