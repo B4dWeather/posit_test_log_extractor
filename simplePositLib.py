@@ -254,13 +254,18 @@ def isRepresentable(num, p_size, es_size):
     return res
 
 
-def binary_sum(b1, b2):
+def binary_sum(max_size, b1, b2):
     res_reversed = []
     carry = 0
     res = ""
-    n = len(b1)
-    for i in range(n).__reversed__():
-        s = carry + int(b1[i]) + int(b2[i])
+    a = 0
+    b = 0
+    for i in range(max_size).__reversed__():
+        if i < len(b1):
+            a = int(b1[i])
+        if i < len(b2):
+            b = int(b2[i])
+        s = carry + a + b
         if s == 0:
             carry = 0
             res_reversed += [0]
@@ -279,8 +284,12 @@ def binary_sum(b1, b2):
             res += "1"
         else:
             res += "0"
-    print(res)
+
+    while len(res) < max_size:
+        res += "0"
+    print(len(res))
+    return res
 
 
-def binary_diff(b1, b2):
-    return binary_sum(b1, a2comp(b2,len(b2)))
+def binary_diff(max_size, b1, b2):
+    return binary_sum(max_size, b1, a2comp(b2, len(b2)))

@@ -29,10 +29,10 @@ out = 0
 # f.close()
 # f.write()
 
-binary_diff('0010', "0010")
-binary_diff('0001', "0010")
-binary_diff('0010', "0001")
-binary_diff('0101', "0011")
-binary_diff('0110', "0011")
+binary_diff(8,'00000010', "00000010")
+binary_diff(8,'00000001', "00000010")
+binary_diff(8,'00000010', "00000001")
+binary_diff(8,'00000101', "00000011")
+binary_diff(8,'00000110', "00000011")
 
-binary_diff('1010', "0011")
+binary_diff(8,'00001010', "00000011")

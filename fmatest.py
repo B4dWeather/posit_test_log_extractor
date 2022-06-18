@@ -210,8 +210,9 @@ def validate_log(input_file, max_lines=-1):
                         last_msg = "a"
                     else:
                         # output might be not representable
-                        o_lb_f = posit2real(binary_diff(bin(int(out_b, 2)),bin(rounding_tolerance)), N, ES)
-                        o_ub_f = posit2real(binary_sum(bin(int(out_b, 2)),bin(rounding_tolerance)), N, ES)
+                        o_lb_f = posit2real(binary_diff(N,out_b, str(rounding_tolerance).zfill(N)), N,
+                                            ES)
+                        o_ub_f = posit2real(binary_sum(N,out_b, str(rounding_tolerance).zfill(N)), N, ES)
 
                         e_low, _ = calculate_error(a_f, b_f, c_f, o_lb_f, 0)
                         e_upp, _ = calculate_error(a_f, b_f, c_f, o_ub_f, 0)
@@ -227,13 +228,14 @@ def validate_log(input_file, max_lines=-1):
                                 Approx_ok += 1  # down rounding has happened
                                 last_msg = "a"
                             else:  # error is beyond approximation threshold
-                                representable = isRepresentable(expected_output(a_f, b_f, c_f),N,ES)
+                                representable = isRepresentable(expected_output(a_f, b_f, c_f), N, ES)
                                 if representable:
                                     Mistakes += 1
                                     last_msg = "e"
                                 else:
                                     Approx_no += 1
                                     last_msg = "o"
+
                 else:
                     # the output can be represented and it is correct
                     Read += 1
