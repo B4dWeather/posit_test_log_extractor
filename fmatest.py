@@ -5,11 +5,14 @@ from simplePositLib import *
 
 # ---------------------------------------------------------------
 # ----------------------- CONFIGURATION -------------------------
-verbose = False  # output more data to console; True => VERY SLOW to execute
+verbose = True  # output more data to console; True => VERY SLOW to execute
+show_progress = True  # output in console how many lines have been read
 path = 'logs'  # folder containing the .log files
-rounding_tolerance = 2  # how many consecutive posits are considered a correct approximation
-limit_rows_per_file = 11001  # max lines per file to read; put -1 to read the whole file.
+rounding_tolerance = 1  # how many consecutive posits are considered a correct approximation
+limit_rows_per_file = -1  # max lines per file to read; put -1 to read the whole file.
 limit_errors_to_display = 50  # max errors to output in console as samples; put -1 for infinite
+input_type = "bin"  # "bin" or "hex" to select if log file contains binary or hexadecimals
+output_type = "bin"  # "bin" or "hex" to select if log file contains binary or hexadecimals
 # parameter to work with:
 N = 8  # bits on which each posit is allocated
 ES = 0  # bits reserved for exponent, in a posit string
@@ -38,6 +41,7 @@ Approx_no = 0
 Discarded = 0
 last_msg = ""
 errors_displayed = 0
+last_line_read = 0
 
 
 # ---------------------------------------------------------------
@@ -46,19 +50,29 @@ errors_displayed = 0
 # LOG file should be written with rows like: "'i' $input 'o' $output"
 def extract_raw_input(raw_input):
     chunks = raw_input.split(' ')
-    # the output is made with two parts: a flag (1 bit) + a vector (variable size)
     # chunks[1] is the input
+    # the output is made with two parts: a flag (1 bit) + a vector (variable size)
     # chunks[3] is {flag[1],output[n]}
     return chunks[1], chunks[3][1:], chunks[3][0]
 
 
 # input array is {A,B,C}
 # output array has already been trimmed to remove the flag that was in head
-def split_variables(in_hex, out_hex):
-    a = hex2bit(in_hex[:A_h_len], A_binary_len)
-    b = hex2bit(in_hex[A_h_len:A_h_len + B_h_len], B_binary_len)
-    c = hex2bit(in_hex[A_h_len + B_h_len:], C_binary_len)
-    o = hex2bit(out_hex, Out_binary_len)
+# A,B,C,Out can be binary strings or hex strings
+# returned values  must be binary strings
+def split_variables(in_raw, out_raw):
+    if input_type == "hex":
+        a = hex2bit(in_raw[:A_h_len], A_binary_len)
+        b = hex2bit(in_raw[A_h_len:A_h_len + B_h_len], B_binary_len)
+        c = hex2bit(in_raw[A_h_len + B_h_len:], C_binary_len)
+    else:
+        a = in_raw[:A_binary_len]
+        b = in_raw[A_binary_len:A_binary_len + B_binary_len]
+        c = in_raw[A_binary_len + B_binary_len:]
+    if output_type == "hex":
+        o = hex2bit(out_raw, Out_binary_len)
+    else:
+        o = out_raw
     return a, b, c, o
 
 
@@ -77,14 +91,16 @@ def calculate_error(a, b, c, o, sensitivity):
 # fancy console messages
 def verbose_msg(msg):
     if msg == "x":
-        return "Line discarded because of 'x' flag"
+        return "Line discarded because of 'x' flag\n"
     if msg == "a":
-        return "Expected output not representable, but effective output is correctly rounded"
+        return "Expected output not representable, but effective output is correctly rounded\n"
+    if msg == "o":
+        return "Expected output not representable, and effective output is not in rounding interval\n"
     if msg == "e":
-        return "Output is wrong"
+        return "Output is wrong\n"
     if msg == "v":
-        return "Output is correct"
-    return ""
+        return "Output is correct\n"
+    return "\n"
 
 
 # read the log file line by line, and produce a validation report
@@ -99,12 +115,13 @@ def validate_log(input_file, max_lines=-1):
     global verbose
     global last_msg
     global errors_displayed
+    global last_line_read
     # the smallest number that can be represented with the number of bits of the output
     # a number smaller than this is considered not representable
     sensitivity = posit2real('1'.zfill(N))
-
     print("Starting: scan ", input_file)
     with open(path + "/" + input_file, "r") as f:
+        # declare variables to keep the in scope
         a_b = 0
         b_b = 0
         c_b = 0
@@ -117,23 +134,65 @@ def validate_log(input_file, max_lines=-1):
         for line in f:
             # avoid to read the whole file, that might be huge
             raw_input = line.rstrip()
-
+            if last_line_read == raw_input:
+                print("End of file reached")
+                break
+            # last line of the file might be incomplete
+            if Read > 0:
+                if len(last_line_read) != len(raw_input):
+                    print("Incomplete line trimmed out")
+                    break
+            last_line_read = raw_input
             if max_lines == 0:
                 print("Enforced shut down: reached limit of max lines for this file")
                 break
             if max_lines > 0:
                 max_lines -= 1
-            # get input/output arrays as hexadecimals, plus a flag
-            in_hex, out_hex, flag = extract_raw_input(raw_input)
 
+            # get input/output arrays, plus a flag
+            in_vector, out_vector, flag = extract_raw_input(raw_input)
+
+            # check correct size of input string
+            if input_type == "hex":
+                if len(in_vector) != A_h_len + B_h_len + C_h_len:
+                    if verbose:
+                        print("Invalid input arguments for line ", Read)
+                    Discarded += 1
+                    Read += 1
+                    last_msg = "x"
+            else:
+                if len(in_vector) != A_binary_len + B_binary_len + C_binary_len:
+                    if verbose:
+                        print("Invalid input arguments for line ", Read)
+                    Discarded += 1
+                    Read += 1
+                    last_msg = "x"
+            # check correct size of output string
+            if input_type == "hex":
+                if len(out_vector) != Out_h_len:
+                    if verbose:
+                        print("Invalid output arguments for line ", Read)
+                    Discarded += 1
+                    Read += 1
+                    last_msg = "x"
+            else:
+                if len(out_vector) != Out_binary_len:
+                    if verbose:
+                        print("Invalid output arguments for line ", Read)
+                    Discarded += 1
+                    Read += 1
+                    last_msg = "x"
             # if the network was not ready to produce the output yet (usually the very first clock posedge)
             if flag == 'x':
+                if verbose:
+                    print("Invalid line ", Read)
                 Discarded += 1
                 Read += 1
                 last_msg = "x"
+
             else:
                 # cut the arrays into variables
-                a_b, b_b, c_b, out_b = split_variables(in_hex, out_hex)
+                a_b, b_b, c_b, out_b = split_variables(in_vector, out_vector)
                 # convert hex variables into binary variables, then to real variables
                 a_f = posit2real(a_b, 2 * N, ES)
                 b_f = posit2real(b_b, N, ES)
@@ -151,8 +210,8 @@ def validate_log(input_file, max_lines=-1):
                         last_msg = "a"
                     else:
                         # output might be not representable
-                        o_lb_f = posit2real(bin(int(out_b, 2) - rounding_tolerance), N, ES)
-                        o_ub_f = posit2real(bin(int(out_b, 2) + rounding_tolerance), N, ES)
+                        o_lb_f = posit2real(binary_diff(bin(int(out_b, 2)),bin(rounding_tolerance)), N, ES)
+                        o_ub_f = posit2real(binary_sum(bin(int(out_b, 2)),bin(rounding_tolerance)), N, ES)
 
                         e_low, _ = calculate_error(a_f, b_f, c_f, o_lb_f, 0)
                         e_upp, _ = calculate_error(a_f, b_f, c_f, o_ub_f, 0)
@@ -168,7 +227,7 @@ def validate_log(input_file, max_lines=-1):
                                 Approx_ok += 1  # down rounding has happened
                                 last_msg = "a"
                             else:  # error is beyond approximation threshold
-                                representable = out_f == expected_output(a_f, b_f, c_f)
+                                representable = isRepresentable(expected_output(a_f, b_f, c_f),N,ES)
                                 if representable:
                                     Mistakes += 1
                                     last_msg = "e"
@@ -180,7 +239,7 @@ def validate_log(input_file, max_lines=-1):
                     Read += 1
                     Correct += 1
                     last_msg = "v"
-            if Read % 1000 == 0:
+            if show_progress and Read % 1000 == 0:
                 print("Reached line ", Read)
             if verbose or ((last_msg == "e") and (errors_displayed < limit_errors_to_display)):
                 print("Line: ", str(Read))
@@ -189,7 +248,7 @@ def validate_log(input_file, max_lines=-1):
                     print("B: ", b_b, " -> ", b_f)
                     print("C: ", c_b, " -> ", c_f)
                     print("Out: ", out_b, " -> ", out_f)
-                    print(out_f, " = ", a_f, " + ", b_f * c_f)
+                    print(out_f, " = ", a_f, " + ", b_f * c_f, " + error")
                     print("Error: " + str(e))
                 print("Decision: ", verbose_msg(last_msg))
                 if last_msg == "e":
@@ -212,5 +271,6 @@ print("\n # Representable output: ", str(Correct + Mistakes))
 print("Correct results: " + str(Correct))
 print("Mistakes: " + str(Mistakes))
 print("\n # Not representable output: ", str(Approx_ok + Approx_no))
+print("Approximation radius: ", rounding_tolerance, " consecutive posits")
 print("Correctly approximated: " + str(Approx_ok))
 print("Wrongly approximated: " + str(Approx_no))

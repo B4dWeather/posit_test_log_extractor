@@ -1,4 +1,6 @@
 # ---------------------------------------------------------------
+from os import listdir
+
 # ---------------------------------------------------------------
 # Simple python library for some posit operations
 # Usage Example:
@@ -10,6 +12,12 @@
 #   pp_real = posit2real(pp_bin,N,ES) #ES is the number of exponent bits
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
+
+table_folder = "table"
+representable_numbers_cache = []
+cache_max_size = -1
+
+
 # function: compute the A2 complement of a bit string
 def a2comp(bits, expected_len=8):
     # $ parameters $
@@ -109,3 +117,170 @@ def hex2bit(hex_in, expected_len):
     # $expected_len: the number of binary on which the output is required (zero padding if required)
     # returns the number converted in a binary string, with zeroes on the right if necessary
     return bin(int(hex_in, 16))[2:].zfill(expected_len)
+
+
+# TODO: NOT WORKING FOR NEGATIVE NUMBERS
+# function: convert a real number in a string of bit representing a posit
+def real2posit(real: float, p_size, es_size):
+    # $ parameters $
+    # $real: [float] real number to be converted
+    # $p_size: the number of bits on which the number $bits is represented
+    # $es_size: the number of bits reserved for the posit exponent
+    if real == 0:
+        return 0, -p_size + 1, 1, 1
+    p_bit = [0] * p_size
+    r_bit = []
+    fraction_bit = []
+    e = 1
+    s = 0
+    f = 0
+    if real < 0:
+        s = 1
+    k = 0
+
+    # calculate K
+    if real > 0:
+        if real > 1:
+            while pow(pow(2, pow(2, es_size)), k + 1) <= real:
+                k += 1
+        else:  # real in [0,1]
+            while pow(pow(2, pow(2, es_size)), k) > real:
+                k -= 1
+    else:
+        if real < -1:
+            while -pow(pow(2, pow(2, es_size)), k + 1) >= real:
+                k += 1
+        else:  # real in [-1,0]
+            while -pow(pow(2, pow(2, es_size)), k) < real:
+                k -= 1
+
+    # calculate exponent
+    # real /= pow(2, e)
+
+    # calculate fractional part
+    f = abs(real) / pow(pow(2, pow(2, es_size)), k)
+    fraction = f
+
+    # convert fraction to binary
+    for i in range(p_size - len(r_bit) - es_size):
+        if fraction == 0:
+            break
+        if fraction >= pow(2, -i):
+            fraction_bit += [1]
+            fraction -= pow(2, -i)
+        else:
+            fraction_bit += [0]
+
+    # padding
+    while len(fraction_bit) + es_size + len(r_bit) < p_size:
+        fraction_bit += [0]
+
+        # build regime
+    if real > 0:
+        if k >= 0:
+            for _ in range(k + 1):
+                r_bit += [1]
+        else:  # k < 0
+            for _ in range(-k):
+                r_bit += [0]
+    else:
+        # real < 0:
+        if k > 0:
+            for _ in range(k + 1):
+                r_bit += [0]
+        else:  # k < 0
+            for _ in range(-k):
+                r_bit += [1]
+            if k == 0:
+                r_bit = [1]
+
+        # regime terminal bit
+    if r_bit[0] == 0:
+        r_bit += [1]
+    else:
+        r_bit += [0]
+
+        # negative numbers have k increased for 2^n
+    if real < 0:
+        if real == -pow(2, k):
+            r_bit = r_bit[1:]
+
+    # assemble the posit
+    for i in range(p_size):
+        if i > len(r_bit) + es_size:  # write fraction
+            # first bit of fraction_bit is always 0, must be skipped
+            p_bit[i] = fraction_bit[i - (len(r_bit) + es_size)]
+        # if i > len(r_bit) :
+        # write exponent
+
+        else:
+            if i > 0:  # write regime
+                p_bit[i] = r_bit[i - 1]
+            else:
+                p_bit[0] = s  # write sign
+
+    # convert array to string
+    p_out = ""
+    for b in p_bit:
+        p_out += str(b)
+    # returns the number as a binary string encoded in posit, and the parts to make it
+    # remember to store the function result as posit,_,_,_ if you don't need the extra stuff
+    return [[p_out], [s], [r_bit], [fraction_bit]], k, f, e
+
+
+# check if a number is posit_representable using a lookup table
+def isRepresentable(num, p_size, es_size):
+    # $ parameters $
+    # $num: float number that should be checked if representable
+    # $p_size: the number of bits on which the number $bits is represented
+    # $es_size: the number of bits reserved for the posit exponent
+    global representable_numbers_cache
+    if num in representable_numbers_cache:
+        return True
+    res = False
+    with open(table_folder + "/posit_" + str(p_size) + "_" + str(es_size) + ".csv") as f:
+        for line in f:
+            row = line.rstrip()
+            chunks = row.split(" ")
+            if chunks[-1] == "NaR":
+                continue
+            f = float(chunks[-1])
+            if num == f:
+                if cache_max_size > 0:
+                    if cache_max_size < len(representable_numbers_cache):
+                        representable_numbers_cache += [f]
+                res = True
+                # returns if True representable, false if not
+    return res
+
+
+def binary_sum(b1, b2):
+    res_reversed = []
+    carry = 0
+    res = ""
+    n = len(b1)
+    for i in range(n).__reversed__():
+        s = carry + int(b1[i]) + int(b2[i])
+        if s == 0:
+            carry = 0
+            res_reversed += [0]
+        if s == 1:
+            carry = 0
+            res_reversed += [1]
+        if s == 2:
+            carry = 1
+            res_reversed += [0]
+        if s == 3:
+            carry = 1
+            res_reversed += [1]
+
+    for c in res_reversed.__reversed__():
+        if c == 1:
+            res += "1"
+        else:
+            res += "0"
+    print(res)
+
+
+def binary_diff(b1, b2):
+    return binary_sum(b1, a2comp(b2,len(b2)))
