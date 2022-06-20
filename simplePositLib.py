@@ -3,6 +3,7 @@ from os import listdir
 
 # ---------------------------------------------------------------
 # Simple python library for some posit operations
+# ---------------------------------------------------------------
 # Usage Example:
 #   # put your posit (which you have in HEX) in a variable
 #   in_hex = some posit number, represented as HEX on N/4 digits
@@ -11,13 +12,57 @@ from os import listdir
 #   # you can convert it in real
 #   pp_real = posit2real(pp_bin,N,ES) #ES is the number of exponent bits
 # ---------------------------------------------------------------
+# List of functions:
+#
+#   >> a2comp(bits, expected_len=8):
+#       compute 2's complement of a bit string
+#
+#   >> sign(n)
+#       compute the sign of a function. oddly, this function is not available by default in python (it's in numpy)
+#
+#   >> get_regime(posit_bits, size):
+#       extract the regime of a bit string representing a posit, of a given size
+#
+#   >> bit2fraction(bits):
+#       calculate the fractional part of a posit
+#
+#   >> posit2real(bits, p_size=8, es_size=0):
+#       convert a string of bits representing a Posit number in a real number
+#       TODO: this feature is not implemented yet for exponents different than 0
+#
+#   >> hex2bit(hex_in, expected_len):
+#       convert a string representing a hexadecimal number in a binary number, having a given expected length
+#
+# function:
+#   >> real2posit(real: float, p_size, es_size):
+#       convert a real number in a string of bit representing a posit
+#       TODO: this is just a quick attempt left unfinished; it is not working correctly
+#
+#   >> isRepresentable(num, p_size, es_size):
+#       check if a number is posit_representable.
+#       TODO: this feature rely on lookup tables, saved in files for given formats.
+#           if the real2posit function is ever finished, it can replace the use of lookup tables
+#
+#   >> binary_sum(max_size, b1, b2):
+#       calculate additions between binary numbers. operands and result are encoded as strings
+#
+#   >> binary_diff(max_size, b1, b2):
+#       calculate subtractions between binary numbers. operands and result are encoded as strings
+#
 # ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# ------------------- config parameters: ------------------------
+table_folder = "table"  # folder containing posit lookup tables
 
-table_folder = "table"
-representable_numbers_cache = []
+# cache_max_size -1 is unlimited; cache_max_size 0 is to remove this feature
 cache_max_size = -1
+# ------------------ internal variables: ------------------------
+# in order to avoid closing and opening the file several times, the numbers read in there are saved in a local array
+representable_numbers_cache = []
 
 
+# ---------------------------------------------------------------
+# ---------------- function implementation: ---------------------
 # function: compute the A2 complement of a bit string
 def a2comp(bits, expected_len=8):
     # $ parameters $
@@ -50,9 +95,9 @@ def sign(n):
 
 
 # function: compute the regime of the given Posit
-def regime(posit_bits, size):
+def get_regime(posit_bits, size):
     # $ parameters $
-    # $posit_bits: posit number codified as a binary string
+    # $posit_bits: posit number encoded as a binary string
     # $size: the number of bits in posit_bits
     m = 0
     i = 1
@@ -98,7 +143,7 @@ def posit2real(bits, p_size=8, es_size=0):
         s = -1
     if s < 0:
         bits = a2comp(bits, p_size)
-    k, regime_size = regime(bits, p_size)
+    k, regime_size = get_regime(bits, p_size)
     if es_size > 0:
         e = int(bits[regime_size + 1:regime_size + 1 + es_size], 2)
     else:
@@ -246,15 +291,25 @@ def isRepresentable(num, p_size, es_size):
                 continue
             f = float(chunks[-1])
             if num == f:
+                # optional feature: save some numbers aside in order to have a chance to avoid reading the file again
+                # useful if you have lots of repetitions, and large lookup table
                 if cache_max_size > 0:
                     if cache_max_size < len(representable_numbers_cache):
                         representable_numbers_cache += [f]
+                    if cache_max_size == len(representable_numbers_cache):
+                        # if cache is full, remove the oldest element
+                        representable_numbers_cache = representable_numbers_cache[1:]
                 res = True
                 # returns if True representable, false if not
     return res
 
 
+# compute additions between two binary numbers
 def binary_sum(max_size, b1, b2):
+    # $ parameters $
+    # max_size: length of strings b1 and b2
+    # $b1: operand as a string
+    # $b2: operand as a string
     res_reversed = []
     carry = 0
     res = ""
@@ -287,9 +342,16 @@ def binary_sum(max_size, b1, b2):
 
     while len(res) < max_size:
         res += "0"
-    print(len(res))
+    # return a string of bits representing the result
     return res
 
 
+# compute subtractions between two binary numbers
 def binary_diff(max_size, b1, b2):
+    # $ parameters $
+    # max_size: length of strings b1 and b2
+    # $b1: operand as a string
+    # $b2: operand as a string
+    # returns the subctraction as a string of bits
     return binary_sum(max_size, b1, a2comp(b2, len(b2)))
+

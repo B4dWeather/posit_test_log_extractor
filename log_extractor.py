@@ -210,9 +210,9 @@ def validate_log(input_file, max_lines=-1):
                         last_msg = "a"
                     else:
                         # output might be not representable
-                        o_lb_f = posit2real(binary_diff(N,out_b, str(rounding_tolerance).zfill(N)), N,
+                        o_lb_f = posit2real(binary_diff(N, out_b, str(rounding_tolerance).zfill(N)), N,
                                             ES)
-                        o_ub_f = posit2real(binary_sum(N,out_b, str(rounding_tolerance).zfill(N)), N, ES)
+                        o_ub_f = posit2real(binary_sum(N, out_b, str(rounding_tolerance).zfill(N)), N, ES)
 
                         e_low, _ = calculate_error(a_f, b_f, c_f, o_lb_f, 0)
                         e_upp, _ = calculate_error(a_f, b_f, c_f, o_ub_f, 0)
@@ -258,9 +258,8 @@ def validate_log(input_file, max_lines=-1):
         f.close()
         print("Scan completed")
 
-        # ---------------------------------------------------------------
 
-
+# ---------------------------------------------------------------
 # ------------------------- MAIN BODY ---------------------------
 for file in files:
     validate_log(file, limit_rows_per_file)
