@@ -138,6 +138,9 @@ def posit2real(bits, p_size=8, es_size=0):
     # $bits: a string of bits representing a posit
     # $p_size: the number of bits on which the number $bits is represented
     # $es_size: the number of bits reserved for the posit exponent
+    # check zero beforehand
+    if all(c in '0' for c in bits):
+        return 0
     s = 1
     if bits[0] == '1':
         s = -1
@@ -151,6 +154,7 @@ def posit2real(bits, p_size=8, es_size=0):
     f = 1
     if p_size > regime_size + es_size + 1:
         f = bit2fraction(bits[regime_size + 1 + es_size:])
+
     # returns the real signed number
     return s * f * pow(2, e) * pow(pow(2, pow(2, es_size)), k)
 

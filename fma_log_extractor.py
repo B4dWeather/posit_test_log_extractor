@@ -14,7 +14,7 @@ limit_errors_to_display = 50  # max errors to output in console as samples; put 
 input_type = "bin"  # "bin" or "hex" to select if log file contains binary or hexadecimals
 output_type = "bin"  # "bin" or "hex" to select if log file contains binary or hexadecimals
 # parameter to work with:
-N = 8  # bits on which each posit is allocated
+N = 16  # bits on which each posit is allocated
 ES = 0  # bits reserved for exponent, in a posit string
 # ---------------------------------------------------------------
 # ------------------------- PARAMETERS --------------------------
@@ -262,7 +262,9 @@ def validate_log(input_file, max_lines=-1):
 # ---------------------------------------------------------------
 # ------------------------- MAIN BODY ---------------------------
 for file in files:
-    validate_log(file, limit_rows_per_file)
+    # read all .log files containing the appropriate size of N
+    if file.__contains__(str(N)):
+        validate_log(file, limit_rows_per_file)
 
 # validation report
 print("\n ========= Analysis completed ========= ")
